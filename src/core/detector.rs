@@ -22,14 +22,26 @@ pub(crate) fn is_agy_cli_name(name: &str) -> bool {
     let name = name.to_ascii_lowercase();
     matches!(
         name.as_str(),
-        "agy" | "agy.exe" | "antigravity" | "antigravity.exe"
-    ) || (name.starts_with("agy-")
+        "agy"
+            | "agy.exe"
+            | "antigravity"
+            | "antigravity.exe"
+            | "antigravity-cli"
+            | "antigravity-cli.exe"
+    ) || ((name.starts_with("agy-") || name.starts_with("antigravity-cli-"))
         && Path::new(&name)
             .extension()
             .is_none_or(|extension| extension == "exe"))
 }
 
-const CLI_NAMES: [&str; 4] = ["agy.exe", "agy", "antigravity.exe", "antigravity"];
+const CLI_NAMES: [&str; 6] = [
+    "agy.exe",
+    "agy",
+    "antigravity-cli.exe",
+    "antigravity-cli",
+    "antigravity.exe",
+    "antigravity",
+];
 
 pub(crate) fn same_target_path(left: &Path, right: &Path) -> bool {
     #[cfg(windows)]
@@ -117,13 +129,23 @@ pub fn find_installations() -> Vec<PathBuf> {
             r"%LOCALAPPDATA%\Programs\antigravity",
             r"%LOCALAPPDATA%\Programs\Antigravity IDE",
             r"%LOCALAPPDATA%\Programs\antigravity-ide",
+            r"%LOCALAPPDATA%\Programs\Antigravity CLI",
+            r"%LOCALAPPDATA%\Programs\antigravity-cli",
             r"%PROGRAMFILES%\Antigravity",
             r"%PROGRAMFILES%\Antigravity IDE",
+            r"%PROGRAMFILES%\Antigravity CLI",
             r"%PROGRAMFILES(X86)%\Antigravity",
             r"%PROGRAMFILES(X86)%\Antigravity IDE",
+            r"%PROGRAMFILES(X86)%\Antigravity CLI",
+            r"%USERPROFILE%\.gemini\antigravity",
+            r"%USERPROFILE%\.gemini\antigravity-ide",
+            r"%USERPROFILE%\.gemini\antigravity-cli",
+            r"%USERPROFILE%\.agy",
             r"%USERPROFILE%\scoop\apps\antigravity\current",
             r"%USERPROFILE%\scoop\apps\antigravity-ide\current",
             r"%USERPROFILE%\.gemini\bin",
+            r"%USERPROFILE%\scoop\apps\agy\current",
+            r"%USERPROFILE%\scoop\apps\antigravity-cli\current",
         ];
         for c in candidates {
             let p = expand_env_vars(c);
@@ -169,13 +191,20 @@ pub fn find_installations() -> Vec<PathBuf> {
         let candidates = [
             "/Applications/Antigravity.app",
             "/Applications/Antigravity IDE.app",
+            "/Applications/Antigravity CLI.app",
             "/Applications/Google Antigravity.app",
             "~/Applications/Antigravity.app",
             "~/Applications/Antigravity IDE.app",
+            "~/Applications/Antigravity CLI.app",
             "~/Applications/Google Antigravity.app",
             "~/Library/Application Support/Antigravity",
             "~/Library/Application Support/Antigravity IDE",
+            "~/Library/Application Support/Antigravity CLI",
             "~/Library/Application Support/Google Antigravity",
+            "~/.gemini/antigravity",
+            "~/.gemini/antigravity-ide",
+            "~/.gemini/antigravity-cli",
+            "~/.agy",
             "/opt/homebrew/Caskroom/antigravity",
             "/opt/homebrew/Caskroom/antigravity-ide",
             "/opt/homebrew/bin",
@@ -229,15 +258,25 @@ pub fn find_installations() -> Vec<PathBuf> {
             "/opt/Antigravity",
             "/opt/antigravity-ide",
             "/opt/Antigravity IDE",
+            "/opt/antigravity-cli",
+            "/opt/Antigravity CLI",
             "/usr/lib/antigravity",
             "/usr/lib/antigravity-ide",
+            "/usr/lib/antigravity-cli",
             "/usr/share/antigravity",
             "/usr/share/antigravity-ide",
+            "/usr/share/antigravity-cli",
             "~/.local/share/antigravity",
             "~/.local/share/antigravity-ide",
+            "~/.local/share/antigravity-cli",
             "~/.config/Antigravity",
             "~/.config/Antigravity IDE",
             "~/.gemini/bin",
+            "~/.config/Antigravity CLI",
+            "~/.gemini/antigravity",
+            "~/.gemini/antigravity-ide",
+            "~/.gemini/antigravity-cli",
+            "~/.agy",
         ];
         for c in candidates {
             let p = expand_env_vars(c);
@@ -296,8 +335,18 @@ fn cli_search_dirs() -> Vec<PathBuf> {
         dirs.push(home.join(".local/bin"));
         dirs.push(home.join(".agy/bin"));
         dirs.push(home.join(".gemini/bin"));
+        dirs.push(home.join(".gemini/antigravity-cli/bin"));
+        dirs.push(home.join(".gemini/antigravity/bin"));
     }
     dirs
+}
+
+#[test]
+fn cli_search_includes_ide_managed_installations() {
+    let dirs = cli_search_dirs();
+    for home in crate::system::env::get_user_homes() {
+        assert!(dirs.contains(&home.join(".gemini/bin")));
+    }
 }
 
 /// Only mutating commands call recovery. Read-only discovery/status never
@@ -632,6 +681,8 @@ pub fn find_targets_in_path(root: &Path) -> Vec<FoundTarget> {
         "language_server",
         "agy.exe",
         "agy",
+        "antigravity-cli.exe",
+        "antigravity-cli",
         "antigravity.exe",
         "antigravity",
     ];
@@ -1316,7 +1367,16 @@ fn status_for_installations(installs: &[PathBuf]) -> SystemComponentsStatus {
             }
             status.ide_cli_available |= app.join("out/cli.js").is_file();
         }
-        for name in ["agy.cmd", "agy.ps1", "agy"] {
+        for name in [
+            "agy.cmd",
+            "agy.ps1",
+            "agy",
+            "antigravity-ide.cmd",
+            "antigravity-ide",
+            "antigravity-cli.cmd",
+            "antigravity-cli.ps1",
+            "antigravity-cli",
+        ] {
             let launcher = inst.join("bin").join(name);
             if launcher.is_file() && !native_executable(&launcher) {
                 status.cli_launchers.push(launcher);
@@ -1346,7 +1406,16 @@ fn status_for_installations(installs: &[PathBuf]) -> SystemComponentsStatus {
 
     if let Some(path) = std::env::var_os("PATH") {
         for dir in std::env::split_paths(&path) {
-            for name in ["agy.cmd", "agy.ps1", "agy"] {
+            for name in [
+                "agy.cmd",
+                "agy.ps1",
+                "agy",
+                "antigravity-ide.cmd",
+                "antigravity-ide",
+                "antigravity-cli.cmd",
+                "antigravity-cli.ps1",
+                "antigravity-cli",
+            ] {
                 let path = dir.join(name);
                 if path.is_file()
                     && !native_executable(&path)
